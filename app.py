@@ -48,4 +48,10 @@ demo = gr.Interface(
 )
 
 if __name__ == "__main__":
-    demo.launch()
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--public", action="store_true", help="Écouter sur 0.0.0.0")
+    args = parser.parse_args()
+
+    demo.launch(server_name="0.0.0.0" if args.public else "127.0.0.1")
