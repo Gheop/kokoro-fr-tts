@@ -10,8 +10,18 @@ logging.getLogger("phonemizer").setLevel(logging.ERROR)
 import gradio as gr  # noqa: E402
 import numpy as np  # noqa: E402
 
-from audio_player import play_stream  # noqa: E402
 from tts_engine import KokoroEngine  # noqa: E402
+
+try:
+    import sounddevice as sd
+
+    sd.query_devices()
+    _has_audio = True
+except Exception:
+    _has_audio = False
+
+if _has_audio:
+    from audio_player import play_stream  # noqa: E402
 
 _engine: KokoroEngine | None = None
 
@@ -24,10 +34,13 @@ def get_engine() -> KokoroEngine:
 
 
 def synthesize(text: str) -> tuple[int, np.ndarray]:
-    """Génère l'audio en streaming (HP) et renvoie l'audio complet pour Gradio."""
+    """Génère l'audio et renvoie l'audio complet pour Gradio. Joue sur les HP si disponible."""
     engine = get_engine()
     sr = engine.sample_rate
-    chunks = play_stream(engine.generate_stream(text), sr)
+    if _has_audio:
+        chunks = play_stream(engine.generate_stream(text), sr)
+    else:
+        chunks = list(engine.generate_stream(text))
     if not chunks:
         return sr, np.array([], dtype=np.float32)
     return sr, np.concatenate(chunks)
