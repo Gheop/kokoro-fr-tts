@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TTS Streaming Test</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, sans-serif;
+    max-width: 600px;
+    margin: 60px auto;
+    padding: 0 20px;
+    color: #222;
+  }
+  h1 { font-size: 1.3em; margin-bottom: 8px; }
+  p.hint { color: #666; font-size: 0.9em; margin-bottom: 16px; }
+  textarea {
+    width: 100%;
+    height: 180px;
+    padding: 12px;
+    font-size: 1em;
+    border: 2px solid #ccc;
+    border-radius: 8px;
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  textarea:focus { border-color: #4a90d9; }
+  #status {
+    margin-top: 12px;
+    font-size: 0.9em;
+    color: #666;
+    min-height: 1.4em;
+  }
+  #status.playing { color: #2a7d2a; }
+  #status.error { color: #c33; }
+</style>
+</head>
+<body>
+
+<h1>TTS Streaming</h1>
+<p class="hint">Collez du texte &mdash; l'audio d&eacute;marre imm&eacute;diatement.</p>
+<textarea id="text" placeholder="Collez votre texte ici..." autofocus></textarea>
+<div id="status"></div>
+
+<script>
+const SAMPLE_RATE = 24000;
+const WAV_HEADER_SIZE = 44;
+
+const textEl = document.getElementById('text');
+const statusEl = document.getElementById('status');
+
+let abortCtrl = null;
+let audioCtx = null;
+
+function setStatus(msg, cls) {
+  statusEl.textContent = msg;
+  statusEl.className = cls || '';
+}
+
+// Start playback when user pastes text
+textEl.addEventListener('paste', (e) => {
+  // Get pasted text (the textarea value isn't updated yet at paste time)
+  const pasted = (e.clipboardData || window.clipboardData).getData('text');
+  if (!pasted.trim()) return;
+
+  // Replace textarea content with pasted text
+  e.preventDefault();
+  textEl.value = pasted;
+
+  playStreaming(pasted);
+});
+
+// Also allow Enter (without Shift) to trigger
+textEl.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    const text = textEl.value.trim();
+    if (text) playStreaming(text);
+  }
+});
+
+async function playStreaming(text) {
+  // Abort any in-flight request
+  if (abortCtrl) abortCtrl.abort();
+  abortCtrl = new AbortController();
+
+  // Close previous audio context to stop playback
+  if (audioCtx) {
+    audioCtx.close().catch(() => {});
+  }
+  audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
+
+  setStatus('Envoi...', '');
+
+  let response;
+  try {
+    response = await fetch('/v1/audio/speech', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ input: text }),
+      signal: abortCtrl.signal,
+    });
+  } catch (err) {
+    if (err.name === 'AbortError') return;
+    setStatus('Erreur de connexion', 'error');
+    return;
+  }
+
+  if (!response.ok) {
+    setStatus(`Erreur ${response.status}`, 'error');
+    return;
+  }
+
+  setStatus('Streaming...', 'playing');
+
+  const reader = response.body.getReader();
+  let remainder = new Uint8Array(0);
+  let headerSkipped = false;
+  let nextTime = audioCtx.currentTime;
+  let totalSamples = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      // Concatenate with leftover bytes from previous iteration
+      const buf = new Uint8Array(remainder.length + value.length);
+      buf.set(remainder);
+      buf.set(value, remainder.length);
+
+      let offset = 0;
+
+      // Skip the 44-byte WAV header
+      if (!headerSkipped) {
+        if (buf.length < WAV_HEADER_SIZE) {
+          remainder = buf;
+          continue;
+        }
+        offset = WAV_HEADER_SIZE;
+        headerSkipped = true;
+      }
+
+      // We need an even number of bytes (int16 = 2 bytes per sample)
+      const available = buf.length - offset;
+      const sampleCount = Math.floor(available / 2);
+      if (sampleCount === 0) {
+        remainder = buf.slice(offset);
+        continue;
+      }
+
+      // Copy to aligned buffer then convert int16 -> float32
+      const pcmBytes = buf.slice(offset, offset + sampleCount * 2);
+      const int16 = new Int16Array(pcmBytes.buffer, pcmBytes.byteOffset, sampleCount);
+      const float32 = new Float32Array(sampleCount);
+      for (let i = 0; i < sampleCount; i++) {
+        float32[i] = int16[i] / 32768;
+      }
+
+      // Schedule playback
+      const audioBuf = audioCtx.createBuffer(1, sampleCount, SAMPLE_RATE);
+      audioBuf.getChannelData(0).set(float32);
+      const source = audioCtx.createBufferSource();
+      source.buffer = audioBuf;
+      source.connect(audioCtx.destination);
+
+      const startAt = Math.max(audioCtx.currentTime, nextTime);
+      source.start(startAt);
+      nextTime = startAt + audioBuf.duration;
+      totalSamples += sampleCount;
+
+      // Keep leftover partial sample bytes
+      remainder = buf.slice(offset + sampleCount * 2);
+    }
+  } catch (err) {
+    if (err.name === 'AbortError') return;
+    setStatus('Erreur streaming', 'error');
+    return;
+  }
+
+  const duration = (totalSamples / SAMPLE_RATE).toFixed(1);
+  setStatus(`${duration}s d'audio`, 'playing');
+}
+</script>
+</body>
+</html>

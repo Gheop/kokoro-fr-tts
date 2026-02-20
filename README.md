@@ -5,8 +5,10 @@ Synthèse vocale en français avec [Kokoro TTS](https://github.com/hexgrad/kokor
 ## Fonctionnalités
 
 - **TTS français naturel** — voix `ff_siwis` via le modèle Kokoro-82M
-- **Corrections de prononciation** — détection automatique et correction des mots qu'espeak-ng bascule en anglais (anglicismes : parking, football...) + dictionnaire manuel pour les cas spéciaux (dos, pull)
+- **Corrections de prononciation** — détection automatique et correction des mots qu'espeak-ng bascule en anglais (anglicismes : parking, football...) + dictionnaire manuel pour les cas spéciaux (dos, pull, blockchain)
 - **Streaming audio** — les chunks audio sont joués sur les haut-parleurs dès qu'ils sont générés, sans attendre la fin de la synthèse
+- **API streaming** — endpoint `POST /v1/audio/speech` compatible OpenAI TTS, streaming WAV PCM en chunked transfer encoding
+- **Page de test** — page web minimaliste (`/test`) pour tester le streaming : coller du texte → l'audio sort immédiatement
 - **Interface web** — Gradio pour tester directement dans le navigateur
 
 ## Installation
@@ -60,6 +62,34 @@ uv run app.py
 
 Ouvre http://localhost:7860 dans le navigateur. Entrez du texte en français, l'audio est généré et joué directement sur les haut-parleurs du serveur, puis affiché dans le navigateur.
 
+### API streaming
+
+L'endpoint `POST /v1/audio/speech` est compatible avec l'API TTS d'OpenAI. L'audio est streamé en WAV PCM 16-bit mono 24 kHz dès que les premiers chunks sont prêts.
+
+```bash
+curl -X POST http://localhost:7860/v1/audio/speech \
+  -H "Content-Type: application/json" \
+  -d '{"input": "Bonjour, comment allez-vous ?", "voice": "ff_siwis", "speed": 1.0}' \
+  --output output.wav
+```
+
+Ou en Python :
+
+```python
+import requests
+
+response = requests.post(
+    "http://localhost:7860/v1/audio/speech",
+    json={"input": "Bonjour, comment allez-vous ?", "voice": "ff_siwis"},
+    stream=True,
+)
+with open("output.wav", "wb") as f:
+    for chunk in response.iter_content(chunk_size=4096):
+        f.write(chunk)
+```
+
+Une page de test est disponible sur http://localhost:7860/test — collez du texte et l'audio démarre immédiatement.
+
 ### En Python
 
 ```python
@@ -97,6 +127,7 @@ Pour les vrais mots français où le mapping phonémique ne suffit pas (ex: "dos
 FRENCH_FIXES = {
     r"\bdos\b": "deau",
     r"\bpull\b": "pul",
+    r"\bblockchains?\b": "bloktchène",
 }
 ```
 
@@ -115,9 +146,10 @@ uv run pytest
 ## Structure
 
 ```
-├── app.py            # Interface Gradio
+├── app.py            # Interface Gradio + API streaming FastAPI
 ├── tts_engine.py     # Moteur TTS (Kokoro) + corrections prononciation
 ├── audio_player.py   # Lecture audio (play + play_stream)
+├── test.html         # Page de test streaming
 ├── tests/            # Tests
 ├── Dockerfile
 └── pyproject.toml

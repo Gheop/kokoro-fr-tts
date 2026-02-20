@@ -29,6 +29,18 @@ def test_no_partial_match():
     assert _fix_pronunciation("pullover") == "pullover"
 
 
+def test_blockchain_is_corrected():
+    assert _fix_pronunciation("La blockchain est décentralisée") == (
+        "La bloktchène est décentralisée"
+    )
+
+
+def test_blockchains_plural_is_corrected():
+    assert _fix_pronunciation("Les blockchains publiques") == (
+        "Les bloktchène publiques"
+    )
+
+
 def test_no_correction_needed():
     text = "Bonjour, comment allez-vous ?"
     assert _fix_pronunciation(text) == text

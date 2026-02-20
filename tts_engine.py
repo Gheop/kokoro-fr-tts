@@ -10,6 +10,7 @@ import numpy as np
 FRENCH_FIXES: dict[str, str] = {
     r"\bdos\b": "deau",
     r"\bpull\b": "pul",
+    r"\bblockchains?\b": "bloktchène",
 }
 
 
@@ -153,9 +154,16 @@ class KokoroEngine:
             return np.array([], dtype=np.float32), self.sample_rate
         return np.concatenate(chunks), self.sample_rate
 
-    def generate_stream(self, text: str) -> Iterator[np.ndarray]:
+    def generate_stream(
+        self,
+        text: str,
+        voice: str | None = None,
+        speed: float | None = None,
+    ) -> Iterator[np.ndarray]:
         """Yield les chunks audio au fur et à mesure de la génération."""
         text = _fix_pronunciation(text)
-        for _gs, _ps, audio in self.pipeline(text, voice=self.voice, speed=self.speed):
+        voice = voice or self.voice
+        speed = speed if speed is not None else self.speed
+        for _gs, _ps, audio in self.pipeline(text, voice=voice, speed=speed):
             if audio is not None:
                 yield np.asarray(audio, dtype=np.float32)
