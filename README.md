@@ -5,7 +5,7 @@ Synthèse vocale en français avec [Kokoro TTS](https://github.com/hexgrad/kokor
 ## Fonctionnalités
 
 - **TTS français naturel** — voix `ff_siwis` via le modèle Kokoro-82M
-- **Corrections de prononciation** — dictionnaire de mots français qu'espeak-ng traite incorrectement comme anglais (ex: "dos", "pull"), corrigés avant le passage au G2P
+- **Corrections de prononciation** — détection automatique et correction des mots qu'espeak-ng bascule en anglais (anglicismes : parking, football...) + dictionnaire manuel pour les cas spéciaux (dos, pull)
 - **Streaming audio** — les chunks audio sont joués sur les haut-parleurs dès qu'ils sont générés, sans attendre la fin de la synthèse
 - **Interface web** — Gradio pour tester directement dans le navigateur
 
@@ -14,8 +14,14 @@ Synthèse vocale en français avec [Kokoro TTS](https://github.com/hexgrad/kokor
 ### Prérequis
 
 - Python 3.12+
-- [uv](https://docs.astral.sh/uv/) (gestionnaire de paquets recommandé)
+- [uv](https://docs.astral.sh/uv/) (gestionnaire de paquets recommandé) ou pip
 - `espeak-ng` (dépendance système pour le G2P)
+
+### Installer uv
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
 
 ### Système
 
@@ -36,6 +42,12 @@ brew install espeak-ng
 git clone https://github.com/Gheop/kokoro-fr-tts.git
 cd kokoro-fr-tts
 uv sync
+```
+
+Alternativement, avec pip :
+
+```bash
+pip install -e .
 ```
 
 ## Utilisation
@@ -75,7 +87,11 @@ docker run --rm -p 7860:7860 kokoro-fr-tts
 
 ## Corrections de prononciation
 
-Le moteur G2P (espeak-ng) traite parfois des mots français comme anglais. Par exemple, "dos" est phonémisé `/dɒs/` au lieu de `/do/`. Le dictionnaire `FRENCH_FIXES` dans `tts_engine.py` corrige ces cas en remplaçant les mots problématiques par des graphies phonétiques avant le G2P :
+Le moteur G2P (espeak-ng) bascule silencieusement certains mots français en anglais. La correction se fait en deux couches :
+
+### Layer 1 : corrections textuelles (`FRENCH_FIXES`)
+
+Pour les vrais mots français où le mapping phonémique ne suffit pas (ex: "dos" → le `s` final devrait être muet), on remplace le mot par une graphie phonétique avant le G2P :
 
 ```python
 FRENCH_FIXES = {
@@ -85,6 +101,10 @@ FRENCH_FIXES = {
 ```
 
 Pour ajouter une correction, il suffit d'ajouter une entrée `{regex: graphie_correcte}` au dictionnaire.
+
+### Layer 2 : correction automatique des switches anglais (`FrenchG2P`)
+
+Pour les anglicismes courants (parking, football, weekend, jogging...), `FrenchG2P` détecte automatiquement les marqueurs de switch `(en)...(fr)` dans la sortie du phonemizer et convertit les phonèmes anglais en phonèmes français via une table de mapping IPA. Aucune maintenance manuelle nécessaire — tous les mots détectés comme anglais par espeak-ng sont corrigés automatiquement.
 
 ## Tests
 
