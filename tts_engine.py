@@ -8,14 +8,82 @@ import numpy as np
 # On les remplace par des graphies phonétiques que le G2P français gère correctement.
 # Layer 1 : corrections text-level pour les vrais mots FR (ex: "dos" → s final muet).
 FRENCH_FIXES: dict[str, str] = {
+    # Mots français mal prononcés
     r"\bdos\b": "deau",
     r"\bpull\b": "pul",
     r"\bblockchains?\b": "bloktchène",
+    # Sigles — prononciation lettre par lettre
+    r"\bAPI\b": "a-pé-i",
+    r"\bURL\b": "u-erre-elle",
+    r"\bHTML\b": "ache-té-emme-elle",
+    r"\bCSS\b": "cé-esse-esse",
+    r"\bGPU\b": "gé-pé-u",
+    r"\bCPU\b": "cé-pé-u",
+    r"\bIA\b": "i-a",
+    r"\bSQL\b": "esse-ku-elle",
+    r"\bPDF\b": "pé-dé-effe",
+    r"\bUSB\b": "u-esse-bé",
+    # Anglicismes tech — graphie phonétique française
+    r"\bemails?\b": "imèle",
+    r"\bsoftware\b": "softwère",
+    r"\bhardware\b": "ardwère",
+    r"\bstartups?\b": "starteupe",
+    r"\bclouds?\b": "claoude",
+    r"\bfeedback\b": "fidbak",
+    r"\bdeadlines?\b": "dèdlaille",
+    r"\bbugs?\b": "beugue",
+    r"\bfeatures?\b": "fitcheure",
+    r"\btokens?\b": "tokène",
+    r"\bstreaming\b": "strimingue",
+    r"\bprompts?\b": "prompte",
+    r"\bopen\s?source\b": "opène-source",
+    r"\bmachine\s?learning\b": "machinn-leurnigne",
+    r"\bdeep\s?learning\b": "dip-leurnigne",
+}
+
+# Noms propres anglais — case-sensitive pour éviter les faux positifs.
+# espeak-ng les lit à la française (ex: "Gates" → /gat/, "Musk" → /mysk/).
+PROPER_NAMES: dict[str, str] = {
+    # Tech figures — full names (priorité)
+    r"\bBill Gates\b": "Bil Guéïtse",
+    r"\bElon Musk\b": "Ilone Mosk",
+    r"\bSteve Jobs\b": "Stive Djobze",
+    r"\bJeff Bezos\b": "Djef Bézosse",
+    r"\bMark Zuckerberg\b": "Mark Zokeurbergue",
+    r"\bSam Altman\b": "Sam Altmane",
+    r"\bTim Cook\b": "Tim Kouk",
+    r"\bJensen Huang\b": "Djensène Houang",
+    r"\bSundar Pichai\b": "Soundar Pitchaï",
+    r"\bLarry Page\b": "Lari Pèïdje",
+    r"\bSergey Brin\b": "Sergueï Brine",
+    r"\bSatya Nadella\b": "Satia Nadéla",
+    r"\bLinus Torvalds\b": "Lineusse Torvalds",
+    # Last names seuls (sans ambiguïté)
+    r"\bGates\b": "Guéïtse",
+    r"\bMusk\b": "Mosk",
+    r"\bJobs\b": "Djobze",
+    r"\bBezos\b": "Bézosse",
+    r"\bZuckerberg\b": "Zokeurbergue",
+    r"\bAltman\b": "Altmane",
+    r"\bTorvalds\b": "Torvalds",
+    # Entreprises tech
+    r"\bGoogle\b": "Gougueule",
+    r"\bApple\b": "Apeulle",
+    r"\bMicrosoft\b": "Maïkrossofte",
+    r"\bAmazon\b": "Amazone",
+    r"\bOpenAI\b": "Opène-a-aille",
+    r"\bSpaceX\b": "Spèïce-X",
+    r"\bTesla\b": "Tèsla",
+    r"\bNvidia\b": "Ènvidia",
 }
 
 
 def _fix_pronunciation(text: str) -> str:
     """Remplace les mots problématiques avant le passage au G2P."""
+    # Noms propres d'abord (case-sensitive, full names avant last names)
+    for pattern, replacement in PROPER_NAMES.items():
+        text = re.sub(pattern, replacement, text)
+    # Mots courants (case-insensitive)
     for pattern, replacement in FRENCH_FIXES.items():
         text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
     return text
@@ -132,6 +200,45 @@ class FrenchG2P:
         return ps, None
 
 
+# Approximate max tokens per segment to avoid Kokoro rushing long texts.
+# Kokoro uses ~1 token per character on average for French.
+_MAX_CHARS_PER_SEGMENT = 800  # ~200 tokens, conservative estimate
+
+# Sentence-ending punctuation for splitting
+_SENTENCE_END_RE = re.compile(r"(?<=[.!?;])\s+")
+
+
+def _split_into_segments(
+    text: str, max_chars: int = _MAX_CHARS_PER_SEGMENT
+) -> list[str]:
+    """Split text into segments of ~max_chars at sentence boundaries.
+
+    Returns the original text as a single segment if it's short enough.
+    """
+    if len(text) <= max_chars:
+        return [text]
+
+    sentences = _SENTENCE_END_RE.split(text)
+    segments: list[str] = []
+    current: list[str] = []
+    current_len = 0
+
+    for sentence in sentences:
+        sentence_len = len(sentence)
+        if current and current_len + sentence_len > max_chars:
+            segments.append(" ".join(current))
+            current = [sentence]
+            current_len = sentence_len
+        else:
+            current.append(sentence)
+            current_len += sentence_len
+
+    if current:
+        segments.append(" ".join(current))
+
+    return segments
+
+
 class KokoroEngine:
     """Moteur TTS basé sur Kokoro (français, voix ff_siwis)."""
 
@@ -160,10 +267,15 @@ class KokoroEngine:
         voice: str | None = None,
         speed: float | None = None,
     ) -> Iterator[np.ndarray]:
-        """Yield les chunks audio au fur et à mesure de la génération."""
+        """Yield les chunks audio au fur et à mesure de la génération.
+
+        Long texts are split into segments at sentence boundaries to avoid
+        Kokoro rushing the output on large inputs.
+        """
         text = _fix_pronunciation(text)
         voice = voice or self.voice
         speed = speed if speed is not None else self.speed
-        for _gs, _ps, audio in self.pipeline(text, voice=voice, speed=speed):
-            if audio is not None:
-                yield np.asarray(audio, dtype=np.float32)
+        for segment in _split_into_segments(text):
+            for _gs, _ps, audio in self.pipeline(segment, voice=voice, speed=speed):
+                if audio is not None:
+                    yield np.asarray(audio, dtype=np.float32)

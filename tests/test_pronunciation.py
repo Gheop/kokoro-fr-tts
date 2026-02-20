@@ -1,6 +1,7 @@
 from tts_engine import (
     EN_TO_FR,
     FRENCH_FIXES,
+    PROPER_NAMES,
     _fix_en_switches,
     _fix_pronunciation,
     _map_en_to_fr,
@@ -48,6 +49,116 @@ def test_no_correction_needed():
 
 def test_french_fixes_dict_has_entries():
     assert len(FRENCH_FIXES) > 0
+
+
+# --- Tests sigles ---
+
+
+def test_api_sigle():
+    assert _fix_pronunciation("L'API REST") == "L'a-pé-i REST"
+
+
+def test_url_sigle():
+    assert _fix_pronunciation("Ouvrez l'URL") == "Ouvrez l'u-erre-elle"
+
+
+def test_html_sigle():
+    assert _fix_pronunciation("Le code HTML") == "Le code ache-té-emme-elle"
+
+
+def test_css_sigle():
+    assert _fix_pronunciation("Du CSS moderne") == "Du cé-esse-esse moderne"
+
+
+def test_gpu_sigle():
+    assert _fix_pronunciation("Un GPU puissant") == "Un gé-pé-u puissant"
+
+
+def test_cpu_sigle():
+    assert _fix_pronunciation("Le CPU chauffe") == "Le cé-pé-u chauffe"
+
+
+def test_ia_sigle():
+    assert _fix_pronunciation("L'IA générative") == "L'i-a générative"
+
+
+def test_sql_sigle():
+    assert _fix_pronunciation("Une requête SQL") == "Une requête esse-ku-elle"
+
+
+def test_pdf_sigle():
+    assert _fix_pronunciation("Un fichier PDF") == "Un fichier pé-dé-effe"
+
+
+def test_usb_sigle():
+    assert _fix_pronunciation("Une clé USB") == "Une clé u-esse-bé"
+
+
+# --- Tests anglicismes tech ---
+
+
+def test_email():
+    assert _fix_pronunciation("Envoyez un email") == "Envoyez un imèle"
+
+
+def test_emails_plural():
+    assert _fix_pronunciation("Les emails reçus") == "Les imèle reçus"
+
+
+def test_software():
+    assert _fix_pronunciation("Ce software est libre") == "Ce softwère est libre"
+
+
+def test_hardware():
+    assert _fix_pronunciation("Le hardware est neuf") == "Le ardwère est neuf"
+
+
+def test_startup():
+    assert _fix_pronunciation("Une startup innovante") == "Une starteupe innovante"
+
+
+def test_cloud():
+    assert _fix_pronunciation("Dans le cloud") == "Dans le claoude"
+
+
+def test_feedback():
+    assert _fix_pronunciation("Donnez du feedback") == "Donnez du fidbak"
+
+
+def test_deadline():
+    assert _fix_pronunciation("La deadline approche") == "La dèdlaille approche"
+
+
+def test_bug():
+    assert _fix_pronunciation("Un bug critique") == "Un beugue critique"
+
+
+def test_feature():
+    assert _fix_pronunciation("Une nouvelle feature") == "Une nouvelle fitcheure"
+
+
+def test_token():
+    assert _fix_pronunciation("Le token expire") == "Le tokène expire"
+
+
+def test_streaming():
+    assert _fix_pronunciation("En streaming live") == "En strimingue live"
+
+
+def test_prompt():
+    assert _fix_pronunciation("Un bon prompt") == "Un bon prompte"
+
+
+def test_open_source():
+    assert _fix_pronunciation("Un projet open source") == "Un projet opène-source"
+
+
+def test_machine_learning():
+    assert _fix_pronunciation("Le machine learning") == "Le machinn-leurnigne"
+
+
+def test_deep_learning():
+    assert _fix_pronunciation("Le deep learning") == "Le dip-leurnigne"
 
 
 # --- Tests Layer 2 : _fix_en_switches (phoneme-level) ---
@@ -149,3 +260,93 @@ def test_map_en_to_fr_length_removed():
 
 def test_en_to_fr_table_not_empty():
     assert len(EN_TO_FR) > 0
+
+
+# --- Tests noms propres (case-sensitive) ---
+
+
+def test_proper_names_dict_has_entries():
+    assert len(PROPER_NAMES) > 0
+
+
+def test_bill_gates_full():
+    assert _fix_pronunciation("Bill Gates a dit que") == "Bil Guéïtse a dit que"
+
+
+def test_elon_musk_full():
+    assert (
+        _fix_pronunciation("Elon Musk lance une fusée") == "Ilone Mosk lance une fusée"
+    )
+
+
+def test_steve_jobs_full():
+    assert (
+        _fix_pronunciation("Steve Jobs a créé Apple") == "Stive Djobze a créé Apeulle"
+    )
+
+
+def test_jeff_bezos_full():
+    assert (
+        _fix_pronunciation("Jeff Bezos dirige Amazon") == "Djef Bézosse dirige Amazone"
+    )
+
+
+def test_mark_zuckerberg_full():
+    result = _fix_pronunciation("Mark Zuckerberg")
+    assert result == "Mark Zokeurbergue"
+
+
+def test_sam_altman_full():
+    assert (
+        _fix_pronunciation("Sam Altman dirige OpenAI")
+        == "Sam Altmane dirige Opène-a-aille"
+    )
+
+
+def test_gates_last_name_only():
+    assert _fix_pronunciation("Gates a investi") == "Guéïtse a investi"
+
+
+def test_musk_last_name_only():
+    assert _fix_pronunciation("Musk a tweeté") == "Mosk a tweeté"
+
+
+def test_jobs_last_name_only():
+    assert _fix_pronunciation("Jobs était visionnaire") == "Djobze était visionnaire"
+
+
+def test_google():
+    assert _fix_pronunciation("Google a annoncé") == "Gougueule a annoncé"
+
+
+def test_microsoft():
+    assert _fix_pronunciation("Microsoft rachète") == "Maïkrossofte rachète"
+
+
+def test_openai():
+    assert (
+        _fix_pronunciation("OpenAI publie un modèle")
+        == "Opène-a-aille publie un modèle"
+    )
+
+
+def test_nvidia():
+    assert _fix_pronunciation("Nvidia domine le marché") == "Ènvidia domine le marché"
+
+
+def test_spacex():
+    assert _fix_pronunciation("SpaceX lance Starship") == "Spèïce-X lance Starship"
+
+
+def test_proper_names_case_sensitive():
+    """Les noms propres ne doivent pas matcher en minuscules."""
+    # "gates" en minuscule ne doit pas être remplacé
+    assert _fix_pronunciation("les gates du château") == "les gates du château"
+
+
+def test_proper_names_in_sentence():
+    """Plusieurs noms propres dans la même phrase."""
+    result = _fix_pronunciation("Bill Gates et Elon Musk investissent dans OpenAI")
+    assert "Bil Guéïtse" in result
+    assert "Ilone Mosk" in result
+    assert "Opène-a-aille" in result

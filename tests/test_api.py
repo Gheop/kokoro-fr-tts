@@ -26,6 +26,9 @@ def client():
     with patch("app.get_engine", return_value=fake_engine):
         import app
 
+        # Reset queue count and cache between tests
+        app._queue_count = 0
+        app._audio_cache.clear()
         yield TestClient(app.app)
 
 
@@ -102,3 +105,83 @@ def test_speech_custom_voice(client):
         json={"input": "Test", "voice": "ff_siwis", "speed": 1.2},
     )
     assert response.status_code == 200
+
+
+# --- Tests validation ---
+
+
+def test_speech_text_too_long(client):
+    """Texte > 750000 caractères → 422."""
+    response = client.post(
+        "/v1/audio/speech",
+        json={"input": "a" * 750_001},
+    )
+    assert response.status_code == 422
+
+
+def test_speech_text_at_limit(client):
+    """Texte de exactement 750000 caractères → 200."""
+    response = client.post(
+        "/v1/audio/speech",
+        json={"input": "a" * 750_000},
+    )
+    assert response.status_code == 200
+
+
+def test_speech_speed_too_low(client):
+    """Speed < 0.5 → 422."""
+    response = client.post(
+        "/v1/audio/speech",
+        json={"input": "Bonjour", "speed": 0.1},
+    )
+    assert response.status_code == 422
+
+
+def test_speech_speed_too_high(client):
+    """Speed > 2.0 → 422."""
+    response = client.post(
+        "/v1/audio/speech",
+        json={"input": "Bonjour", "speed": 10.0},
+    )
+    assert response.status_code == 422
+
+
+def test_speech_speed_at_bounds(client):
+    """Speed aux bornes [0.5, 2.0] → 200."""
+    for speed in [0.5, 2.0]:
+        response = client.post(
+            "/v1/audio/speech",
+            json={"input": "Bonjour", "speed": speed},
+        )
+        assert response.status_code == 200
+
+
+def test_speech_empty_voice(client):
+    """Voice vide → 422."""
+    response = client.post(
+        "/v1/audio/speech",
+        json={"input": "Bonjour", "voice": ""},
+    )
+    assert response.status_code == 422
+
+
+def test_speech_invalid_format(client):
+    """Format inconnu → 422."""
+    response = client.post(
+        "/v1/audio/speech",
+        json={"input": "Bonjour", "response_format": "flac"},
+    )
+    assert response.status_code == 422
+
+
+def test_speech_queue_full(client):
+    """Quand la queue est pleine → 503."""
+    import app
+
+    app._queue_count = 3  # simulate full queue
+    response = client.post(
+        "/v1/audio/speech",
+        json={"input": "Bonjour"},
+    )
+    assert response.status_code == 503
+    app._queue_count = 0
