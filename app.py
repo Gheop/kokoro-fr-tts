@@ -15,7 +15,7 @@ from tts_engine import KokoroEngine  # noqa: E402
 try:
     import sounddevice as sd
 
-    sd.query_devices()
+    sd.query_devices(kind="output")
     _has_audio = True
 except Exception:
     _has_audio = False
