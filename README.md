@@ -113,7 +113,30 @@ docker build -t kokoro-fr-tts .
 docker run --rm -p 7860:7860 kokoro-fr-tts
 ```
 
-> **Note** : le conteneur ne supporte pas la lecture audio sur les HP du serveur (pas de device audio). L'audio reste accessible via l'interface web Gradio dans le navigateur.
+### GPU (recommandé)
+
+Par défaut le conteneur tourne sur CPU (~30x plus lent). Pour utiliser le GPU :
+
+1. Installer `nvidia-container-toolkit` sur l'hôte (les drivers NVIDIA doivent déjà être installés) :
+   ```bash
+   # Fedora / RHEL
+   sudo dnf install nvidia-container-toolkit
+
+   # Ubuntu / Debian
+   sudo apt install nvidia-container-toolkit
+   ```
+2. Redémarrer Docker :
+   ```bash
+   sudo systemctl restart docker
+   ```
+3. Lancer avec `--gpus all` :
+   ```bash
+   docker run --rm --gpus all -p 7860:7860 kokoro-fr-tts
+   ```
+
+L'image Docker reste identique — le toolkit monte le GPU de l'hôte dans le conteneur.
+
+> **Note** : le conteneur ne supporte pas la lecture audio sur les HP du serveur (pas de device audio). L'audio reste accessible via l'interface web et l'API streaming.
 
 ## Corrections de prononciation
 

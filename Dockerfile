@@ -10,7 +10,7 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev
 
-COPY *.py ./
+COPY *.py test.html ./
 
 EXPOSE 7860
-CMD ["uv", "run", "python", "app.py"]
+CMD ["uv", "run", "python", "app.py", "--public"]
