@@ -1,0 +1,21 @@
+[project]
+name = "kokoro-fr-tts"
+version = "0.1.0"
+description = "Synthèse vocale français naturelle avec Kokoro — interface Gradio et streaming audio"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "kokoro>=0.9.4",
+    "soundfile",
+    "sounddevice",
+    "gradio",
+    "numpy",
+    "torch",
+    "torchaudio",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "ruff",
+]
